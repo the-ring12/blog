@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Presto 架构原理与优化 | Hexo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="1. 概述1.1. 大数据与 OLAP 的演进OLAP（OnLine Analytical Processing）对业务数据执行多维分析，并提供复杂计算，趋势分析和复杂数据建模的能力。是许多商务智能（BI）应用程序背后的技术。 OLAP 核心概念：维度、度量 常见的  OLAP 引擎：  与计算引擎：Kylin、Druid 批式处理引擎：Hive、Saprk 流式处理引擎：Flink 交互式处理引">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Presto 架构原理与优化">
+<meta property="og:url" content="http://the_ring.gitee.io/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1. 概述1.1. 大数据与 OLAP 的演进OLAP（OnLine Analytical Processing）对业务数据执行多维分析，并提供复杂计算，趋势分析和复杂数据建模的能力。是许多商务智能（BI）应用程序背后的技术。 OLAP 核心概念：维度、度量 常见的  OLAP 引擎：  与计算引擎：Kylin、Druid 批式处理引擎：Hive、Saprk 流式处理引擎：Flink 交互式处理引">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803102720230.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803103002056.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803104359902.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803112330433.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803113852154.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803114114211.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803113946981.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803114019886.png">
+<meta property="article:published_time" content="2022-08-03T02:10:10.000Z">
+<meta property="article:modified_time" content="2022-08-03T03:41:44.568Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="bid data">
+<meta property="article:tag" content="presto">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://the_ring.gitee.io/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803102720230.png">
+  
+    <link rel="alternate" href="/blog/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/blog/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/blog/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/blog/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 6.2.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/blog/" id="logo">Hexo</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/blog/">Home</a>
+        
+          <a class="main-nav-link" href="/blog/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/blog/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://the_ring.gitee.io/blog"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-Presto 架构原理与优化介绍" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/" class="article-date">
+  <time class="dt-published" datetime="2022-08-03T02:10:10.000Z" itemprop="datePublished">2022-08-03</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      Presto 架构原理与优化
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="1-概述"><a href="#1-概述" class="headerlink" title="1. 概述"></a>1. 概述</h2><h3 id="1-1-大数据与-OLAP-的演进"><a href="#1-1-大数据与-OLAP-的演进" class="headerlink" title="1.1. 大数据与 OLAP 的演进"></a>1.1. 大数据与 OLAP 的演进</h3><p>OLAP（OnLine Analytical Processing）对业务数据执行多维分析，并提供复杂计算，趋势分析和复杂数据建模的能力。是许多商务智能（BI）应用程序背后的技术。</p>
+<p>OLAP 核心概念：维度、度量</p>
+<p>常见的  OLAP 引擎：</p>
+<ul>
+<li>与计算引擎：Kylin、Druid</li>
+<li>批式处理引擎：Hive、Saprk</li>
+<li>流式处理引擎：Flink</li>
+<li>交互式处理引擎：Presto、Clickhosue、Doris</li>
+</ul>
+<h3 id="1-2-Presto-设计思想"><a href="#1-2-Presto-设计思想" class="headerlink" title="1.2. Presto 设计思想"></a>1.2. Presto 设计思想</h3><p>Presto 最初由 Facebook 研发的构建于 Hadoop&#x2F;HDFS 系统之上的 PB 集交互式分析引擎，具有以下特点：</p>
+<ul>
+<li>多租户任务的管理与调度</li>
+<li>多数据源联邦查询</li>
+<li>支持内存优化计算</li>
+<li>Pipline 式数据处理</li>
+</ul>
+<h2 id="2-Presto-基础原理和概念"><a href="#2-Presto-基础原理和概念" class="headerlink" title="2. Presto 基础原理和概念"></a>2. Presto 基础原理和概念</h2><h3 id="2-1-基础原理与概念"><a href="#2-1-基础原理与概念" class="headerlink" title="2.1. 基础原理与概念"></a>2.1. 基础原理与概念</h3><p><strong>服务相关</strong></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803102720230.png" alt="image-20220803102720230"></p>
+<ul>
+<li>Coordinator<ul>
+<li>解析 SQL 语句</li>
+<li>生成执行计划</li>
+<li>分发执行任务给 Worker 节点</li>
+</ul>
+</li>
+<li>Worker<ul>
+<li>执行 Task 处理数据</li>
+<li>与其他 Worker 交互传输数据</li>
+</ul>
+</li>
+</ul>
+<p><strong>数据源相关</strong></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803103002056.png" alt="image-20220803103002056"></p>
+<ul>
+<li>Connector：一个 Connector 代表一种数据源，可以认为 Connector 是由 Presto 提供的适配多数据源的统一接口。</li>
+<li>Catalog：管理员辕信息与实际数据的映射关系。</li>
+</ul>
+<p><strong>Query 相关</strong></p>
+<ul>
+<li>Query：基于 SQL parser 后获得的执行计划。</li>
+<li>Stage：根据是否需要 shuffle 将 Query 拆分成不同的 subplan，欸一个 subplan 是一个 stage。</li>
+<li>Fragment：基本等价于 stage，属于不同阶段的称呼。</li>
+<li>Task：单个 Worker 节点上的最小资源管理单元，在一个节点上，一个 Stage 只有一个 Task，一个 Query 可能有多个 Task。</li>
+<li>Pipeline：Stage 按照 LocalExchange 切分为若干 Operator 集合，每个 Operator 集合定义一个 Pipeline。</li>
+<li>Driver：Pipeline 的可执行实体，Pipeline 和 Driver 的关系可类比为程序和进程，是最小的执行单元，通过火山迭代模型执行每一个 Operator。</li>
+<li>Split：输入数据描述（数据实体是 Page)，数量上和 Driver 一一对应，不仅代表实际数据源 split，也代表了不同 stage 间传输的数据。</li>
+<li>Operator：最小物理算子。</li>
+</ul>
+<p><strong>数据传输相关</strong></p>
+<ul>
+<li>Exchange：表示不同 Stage 间的数据传输，大多数意义下等价于 Shuffle。</li>
+<li>LocalExchange：Stage 内的 rehash 操作，常用于提高并行处理数据的能力（Task 在 Presto 中只是最小的容器，而不是最小的执行单元），<u>默认值是16</u>。</li>
+</ul>
+<h3 id="2-2-核心组件结构介绍"><a href="#2-2-核心组件结构介绍" class="headerlink" title="2.2. 核心组件结构介绍"></a>2.2. 核心组件结构介绍</h3><p><strong>Presto 结构图</strong></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803104359902.png" alt="image-20220803104359902"></p>
+<p><strong>服务发现</strong></p>
+<p>Discovery Service：</p>
+<ol>
+<li>Worker 配置文件配置 Discovery Service 地址</li>
+<li>Worker 节点启动后会向 Discovery Service 注册</li>
+<li>Coordinator 从 Discovery Service 获取 Worker 的地址</li>
+</ol>
+<p><strong>通信机制</strong></p>
+<ul>
+<li><p>通信机制</p>
+<ol>
+<li>Presto Client &#x2F; JDBC Client 与 Server 间通信 —- htpp</li>
+<li>Coordinator 与 Worker 间的通信 —- Thrift&#x2F;Http</li>
+<li>Worker 与 Worker 间的通信 —- Thrift&#x2F;Http</li>
+</ol>
+<blockquote>
+<p>Thrift 具有更好的数据编码能力，Http 1.1 还不支持头部信息的压缩，Thrift 具有更好的数据压缩能力</p>
+</blockquote>
+</li>
+<li><p>节点状态</p>
+<ul>
+<li>ACTIVE</li>
+<li>INACTIVE</li>
+<li>SHUTDOWN</li>
+</ul>
+</li>
+</ul>
+<h2 id="3-Presto-重要机制"><a href="#3-Presto-重要机制" class="headerlink" title="3. Presto 重要机制"></a>3. Presto 重要机制</h2><h3 id="3-1-多租户资源管理"><a href="#3-1-多租户资源管理" class="headerlink" title="3.1. 多租户资源管理"></a>3.1. 多租户资源管理</h3><p><strong>Resource Group</strong></p>
+<ul>
+<li>类似 Yarn 多级队列的资源管理方式</li>
+<li>基于 CPU、MEMORY、SQL 执行数进行资源使用量限制</li>
+<li>优点：轻量的 Query 级别的多级队列资源管理模式</li>
+<li>缺点：存在一定的滞后性，只会对 Group 中正在运行的 SQL 进行判断</li>
+</ul>
+<p><strong>物理计划生成</strong></p>
+<ol>
+<li>Antlr4 解析生成 AST</li>
+<li>转换成 Logical Plan</li>
+<li>按照是都存在 Shuffle（Exchange），切分成不同的 Stage（Fragment）</li>
+</ol>
+<h3 id="3-2-多租户下的任务调度"><a href="#3-2-多租户下的任务调度" class="headerlink" title="3.2. 多租户下的任务调度"></a>3.2. 多租户下的任务调度</h3><h4 id="Stage-调度"><a href="#Stage-调度" class="headerlink" title="Stage 调度"></a><strong>Stage 调度</strong></h4><ul>
+<li><p>Stage 的调度策略</p>
+<ul>
+<li><p>AllAtOnceExecutionPolicy（同时调度）</p>
+<p>延迟点，会存在任务空跑</p>
+</li>
+<li><p>PhasedExecutionPolicy（分阶段调度）不代表每个 stage 都分开调度，典型应用场景（join 查询）</p>
+<ul>
+<li>Build 端：游标构建用 join 的 hashtable</li>
+<li>Probe 端：对用户左表数据进行探查，需要等待 build 端完成</li>
+<li>build 端构建 hashtable 端时，probe 端一直在空跑的</li>
+</ul>
+<p>有一定延迟，节省部分资源</p>
+</li>
+</ul>
+</li>
+</ul>
+<h4 id="Task-调度"><a href="#Task-调度" class="headerlink" title="Task 调度"></a><strong>Task 调度</strong></h4><ul>
+<li>如何确定 Task 的数量<ul>
+<li>Source：根据数据 meta 决定分配多少个节点</li>
+<li>Fixed：hash partition count 确定，如集群节点数量</li>
+<li>Sink：汇聚结果，一台机器</li>
+<li>Scaled：无分区限制，可扩展，如 write 数据</li>
+<li>Coordinator_only：只需要 coodinator 参与</li>
+</ul>
+</li>
+<li>选择什么样的节点<ul>
+<li>HARD_AFFINITY：计算、存储 Local 模式，保障计算与存储在同一节点，减少数据传输</li>
+<li>SOFT_AFFINITY：基于某些特定算法，如一只  HASH 函数，常用于缓存场景，保证相似的 Task 调度到同一个 Worker</li>
+<li>NO_PREFERENCE：随机选取，常用于普通的纯计算 Task</li>
+</ul>
+</li>
+</ul>
+<h4 id="Split-调度"><a href="#Split-调度" class="headerlink" title="Split 调度"></a><strong>Split 调度</strong></h4><ul>
+<li>FIFO：顺序执行，绝对公平</li>
+<li>优先级调度：快速响应</li>
+</ul>
+<h3 id="3-3-内存计算"><a href="#3-3-内存计算" class="headerlink" title="3.3. 内存计算"></a>3.3. 内存计算</h3><p><strong>Pipeline 化的数据处理</strong></p>
+<p>Pipeline（按 LocalExchange 拆分）：</p>
+<ul>
+<li>Pipeline 的引入更好的实现算子间的并行</li>
+<li>语义上保证了每个 Task 内的数据流式处理</li>
+</ul>
+<p><strong>Back Presure Mechanism</strong></p>
+<ul>
+<li>控制 split 生成流程</li>
+<li>控制 operator 的执行</li>
+</ul>
+<ol>
+<li>targetConcurrency auto-scale-out：定时检查，如果 OutputBuffers 使用率低于 0.5 （下游消费较快，需要提高生产速度），并发度 +1</li>
+<li>sink.max-buffer-size 写入 buffer 的大小控制</li>
+<li>exhange.max0buffer-size 读取 buffer 的大小控制</li>
+</ol>
+<p>达到最大值时 operator 会进入阻塞状态。</p>
+<h3 id="3-4-多数据源联邦查询"><a href="#3-4-多数据源联邦查询" class="headerlink" title="3.4. 多数据源联邦查询"></a>3.4. 多数据源联邦查询</h3><p>将各个数据源进行统一的抽象，最后由 presto server 进行统一的物理执行</p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803112330433.png" alt="image-20220803112330433"></p>
+<p><strong>局限性</strong></p>
+<ol>
+<li>元数据管理与映射（每个 connector 管理一套数据服务）</li>
+<li>谓词下推</li>
+<li>数据源分片</li>
+</ol>
+<h2 id="4-性能优化实践"><a href="#4-性能优化实践" class="headerlink" title="4. 性能优化实践"></a>4. 性能优化实践</h2><p><strong>常用性能分析工具</strong></p>
+<ul>
+<li><p>Grfana：埋点、系统指标如 CPU、内存、网络等的可视化界面，时序化的数据显示</p>
+</li>
+<li><p>Java 相关指令</p>
+<ul>
+<li>Jstack 查看 Java 线程栈信息，排查是否有死锁，或者一场线程存在</li>
+<li>JMX（Java Management Extensions）是一个为应用程序植入管理功能的框架， 常用来做一些监控指标的统计收集</li>
+<li>JMAP &amp; GC 日志等等内存分析工具</li>
+</ul>
+</li>
+<li><p>线上问题排查工具</p>
+<ul>
+<li>Arthas<ul>
+<li>Watch</li>
+<li>Trace</li>
+</ul>
+</li>
+<li>Flame Figure&#x2F;火焰图：用于分析热点代码占用大量 CPU，从而导致服务性能下降的情况</li>
+</ul>
+</li>
+<li><p>Presto UI</p>
+<ul>
+<li>Query 级别统计信息</li>
+<li>Logical Plan</li>
+<li>Stage、Task 信息</li>
+<li>Worker 状态信息</li>
+</ul>
+</li>
+</ul>
+<p>优化实践</p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803113852154.png" alt="image-20220803113852154"></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803114114211.png" alt="image-20220803114114211"></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803113946981.png" alt="image-20220803113946981"></p>
+<p><img src="/blog/images/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/image-20220803114019886.png" alt="image-20220803114019886"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://the_ring.gitee.io/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/" data-id="cl6d2dirr0001cwut6ndrbn1c" data-title="Presto 架构原理与优化" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/bid-data/" rel="tag">bid data</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/presto/" rel="tag">presto</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/blog/2022/07/31/%E5%A4%A7%E6%95%B0%E6%8D%AE-Shuffle-%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">大数据 Shuffle 原理与实践</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/bid-data/" rel="tag">bid data</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/gitee/" rel="tag">gitee</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/github/" rel="tag">github</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/hexo/" rel="tag">hexo</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/presto/" rel="tag">presto</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/shuffle/" rel="tag">shuffle</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/blog/tags/bid-data/" style="font-size: 10px;">bid data</a> <a href="/blog/tags/big-data/" style="font-size: 10px;">big data</a> <a href="/blog/tags/gitee/" style="font-size: 10px;">gitee</a> <a href="/blog/tags/github/" style="font-size: 10px;">github</a> <a href="/blog/tags/hexo/" style="font-size: 10px;">hexo</a> <a href="/blog/tags/presto/" style="font-size: 10px;">presto</a> <a href="/blog/tags/shuffle/" style="font-size: 10px;">shuffle</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/blog/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/blog/archives/2022/07/">July 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/">Presto 架构原理与优化</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/07/31/%E5%A4%A7%E6%95%B0%E6%8D%AE-Shuffle-%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/">大数据 Shuffle 原理与实践</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/07/30/Hexo%20+%20GiteeGithub%20%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/">Hexo + Gitee/Github 搭建个人博客</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/07/30/hello-world/">Hello World</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2022 John Doe<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/blog/" class="mobile-nav-link">Home</a>
+  
+    <a href="/blog/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/blog/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/blog/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/blog/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
