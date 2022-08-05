@@ -71,10 +71,10 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-HDFS 原理与应用" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-HDFS 高可用和高扩展机制分析" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/blog/2022/08/03/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" class="article-date">
-  <time class="dt-published" datetime="2022-08-03T02:10:10.000Z" itemprop="datePublished">2022-08-03</time>
+    <a href="/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" class="article-date">
+  <time class="dt-published" datetime="2022-08-05T05:08:36.000Z" itemprop="datePublished">2022-08-05</time>
 </a>
     
   </div>
@@ -85,7 +85,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/blog/2022/08/03/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/">HDFS 原理与应用</a>
+      <a class="p-name article-title" href="/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/">HDFS 高可用和高扩展机制分析</a>
     </h1>
   
 
@@ -93,15 +93,460 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        
+        <h2 id="1-元数据高可用"><a href="#1-元数据高可用" class="headerlink" title="1. 元数据高可用"></a>1. 元数据高可用</h2><p>高可用的衡量</p>
+<p><img src="/blog/../images/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/image-20220805131626421.png" alt="image-20220805131626421"></p>
+<p>可用性年化</p>
+<p><img src="/blog/../images/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/image-20220805131730291.png" alt="image-20220805131730291"></p>
+<p>高可用的形式</p>
+<p>HDFS 设计中，采用了中心化的元数据管理节点 NameNode。NameNode 容易称为故障中的单点（sngle point of failure）。</p>
+<p>HDFS NameNode 高可用架构</p>
+<ul>
+<li>组件介绍<ul>
+<li>ActiveNamenode：主节点，提供服务，生产日志</li>
+<li>StandbyNamenode：备节点，消费日志</li>
+<li>Zookeeper：为自动选主剔红统一协调服务</li>
+<li>BookKeeper：提供日志存储服务</li>
+<li>ZKFC：NameNode 探活、触发主备切换</li>
+<li>HA Client：提供了自动切换的客户端</li>
+<li>edit log：操作日志</li>
+</ul>
+</li>
+<li>围绕三个问题来看高可用<ul>
+<li>节点状态如何更新</li>
+<li>操作日志如何同步</li>
+<li>如何做到自动切换</li>
+</ul>
+</li>
+</ul>
+<p><img src="/blog/../images/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/image-20220805132032154.png" alt="image-20220805132032154"></p>
+<p>理论基础——状态机复制和日志</p>
+<p>状态机复制是实现容错的常规方法，组件：状态机及其副本、变更日志、共识协议。</p>
+<p>NameNode 操作日志的生产消费</p>
+<p>NameNode 块状态维护</p>
+<p>分布式协调组件——Zookeeper</p>
+<p>自动主备切换流程</p>
+<p>Server侧</p>
+<ol>
+<li>ZKFailvorController：作为外部组件，驱动 HDFS NameNode 的主备切换</li>
+<li>轮询探活</li>
+<li>脑裂问题</li>
+<li>Fence 机制</li>
+</ol>
+<p>Client侧</p>
+<p>核心机制：StandbyException</p>
+<p>Client 自动处理</p>
+<p>BookKeeper 架构</p>
+<p>BookKeeper 存储日志</p>
+<ul>
+<li>低延迟</li>
+<li>持久性</li>
+<li>强一致性</li>
+<li>读写高可用</li>
+</ul>
+<p>对比：日志系统和文件系统的复杂度</p>
+<p>Quorum 机制</p>
+<p>Quorum 机制：多副本一致性读写</p>
+<p>场景：多副本对象存储，用版本号标识数据新旧</p>
+<p>BookKeeper Quorum</p>
+<p>Sloppy Quorum 机制</p>
+<p>日志场景：顺序追加、只写</p>
+<p>Write Quorum：写入副本数</p>
+<p>Ack Quorum：响应副本数</p>
+<p>BookKeeper Ensemble</p>
+<p>Ensemble 机制</p>
+<h2 id="2-数据存储高可用"><a href="#2-数据存储高可用" class="headerlink" title="2. 数据存储高可用"></a>2. 数据存储高可用</h2><p>回到单机存储——RAID</p>
+<p>Redundant Array of Independent Disks</p>
+<p>特点</p>
+<ul>
+<li>廉价</li>
+<li>高性能</li>
+<li>大容量</li>
+<li>高可用</li>
+</ul>
+<p>RAID 方案讲解</p>
+<p>RAID 0：条带化</p>
+<p>RAID 1：冗余</p>
+<p>RAID 3：容错校验</p>
+<p>HDFS 多副本</p>
+<p>HDFS 版本的 RAID 1</p>
+<p>优点：</p>
+<ul>
+<li>读写路径简单</li>
+<li>副本修复简单</li>
+<li>高可用</li>
+</ul>
+<p>Erasure Coding 原理</p>
+<p>HDFS 版本的 RAID 2&#x2F;3</p>
+<p>业界常用 Reed Solomon 算法</p>
+<p>HDFS Erasure Coding</p>
+<p>HDFS 版本的 RAID 2</p>
+<p>和多副本比较</p>
+<ul>
+<li>读写速度</li>
+<li>成本</li>
+<li>修复速度</li>
+<li>读写路径的实现</li>
+</ul>
+<p>初始网络架构</p>
+<p>Server：一台服务器</p>
+<p>机架（Rack）：放服务器的架子</p>
+<p>TOR（Top of Rack）机架顶部的交换机</p>
+<p>POD（Point of Delivery）数据中心中的一个物理区域</p>
+<p>数据中心（Data Center）：集中部署服务器的场所</p>
+<p>副本放置策略——机架感知</p>
+<p>一个 TOR 故障导致整个机架不可用</p>
+<p>降低跨 rack 流量</p>
+<p>trade-off：一个本地、一个远端</p>
+<p>案例：HDFS 多机房实践</p>
+<p>多机房解决问题</p>
+<ul>
+<li>容量问题</li>
+<li>容灾问题</li>
+</ul>
+<p>HDFS 双机房放置设计</p>
+<ul>
+<li>写入时，每个数据块在两个机房至少各有一个副本，数据实时吸入到两个机房</li>
+<li>读取时，有限读本地的副本，避免了大量的跨机房读取</li>
+</ul>
+<p>多机房容灾实践</p>
+<p>多机房部署的组件</p>
+<ul>
+<li>Zookeeper</li>
+<li>BookKeeper</li>
+<li>NameNode</li>
+<li>DataNode</li>
+</ul>
+<p>容灾期间的策略</p>
+<ul>
+<li>容灾期间，限制跨机房写入</li>
+<li>容灾期间，限制跨机房副本复制</li>
+</ul>
+<h2 id="3-元数据高扩展性"><a href="#3-元数据高扩展性" class="headerlink" title="3. 元数据高扩展性"></a>3. 元数据高扩展性</h2><p>元数据节点扩展性的挑战</p>
+<p>HDFS NameNode 是个集中式服务，部署在单个机器上，内存和磁盘的容量、CPUU 的计算力都不能无限扩展</p>
+<p>scale up vs. scale out</p>
+<ul>
+<li>扩容单个服务器的能力</li>
+<li>部署多个服务器来服务</li>
+</ul>
+<p>挑战</p>
+<ul>
+<li>米子空间分裂</li>
+<li>DataNode 汇报</li>
+<li>目录树结构本身复杂</li>
+</ul>
+<p>常见的 Scale Out 方案</p>
+<p>KV 模型的系统可以使用 partition</p>
+<ul>
+<li>Redis</li>
+<li>Kafka</li>
+<li>MySQL（分库分表）</li>
+</ul>
+<p>三种数据路由方式：</p>
+<ul>
+<li>服务端侧</li>
+<li>路由层</li>
+<li>客户端侧</li>
+</ul>
+<p>社区解决方案——BlockPool</p>
+<p>解决 DN 同时服务多组 NN 的问题</p>
+<ul>
+<li>同一个 block id 在不同的 NN 上出现</li>
+</ul>
+<p>文件服务分层</p>
+<ul>
+<li>Namespace</li>
+<li>Block Storage</li>
+</ul>
+<p>用 blockpool 来区分 DN 的服务</p>
+<ul>
+<li>数据块存储</li>
+<li>心跳和块上报</li>
+</ul>
+<p>社区解决方案——viewfs</p>
+<p>Federation 结构：将多个不同集群组合起来，对外表现向一个集群一样</p>
+<p>viewfs 通过在 client-side 的配置，指定不同的目录访问不同的 NameNode</p>
+<p>局限性：运维复杂</p>
+<p>字节跳动的 NNProxy</p>
+<p>NNProxy 是字节字眼的 HDFS 代理层，提供了路由服务</p>
+<p>NNProxy 主要实现了路由管理和 RPC 转发以及鉴权、限流、查询缓存等额外功能</p>
+<p>NNProxy 路由规则保存</p>
+<p>三种数据路由方式：</p>
+<ul>
+<li>服务端侧</li>
+<li>路由层</li>
+<li>客户端侧</li>
+</ul>
+<p>考虑点：扩展性、运维性</p>
+<p>NNProxy 路由转发实现</p>
+<p>路径最长匹配规则，可以进一步划分目录树</p>
+<p>进一步思考：</p>
+<ul>
+<li>单个 NN 不会遇到瓶颈吗？</li>
+<li>跨集群 rename</li>
+</ul>
+<p>案例：小文件问题</p>
+<p>小文件问题（LSOF，lots of small files）：大小不到一个 HDFS Block 大小的文件过多</p>
+<ul>
+<li>NameNode 瓶颈</li>
+<li>I&#x2F;O 变成小的随机 IO，数据访问变慢</li>
+<li>计算任务启动慢</li>
+</ul>
+<p>解决方案：</p>
+<ul>
+<li>后台任务合并小文件</li>
+<li>Shuffle Service</li>
+</ul>
+<h2 id="4-数据存储高扩展性"><a href="#4-数据存储高扩展性" class="headerlink" title="4. 数据存储高扩展性"></a>4. 数据存储高扩展性</h2><p>延迟的分布和长尾延迟</p>
+<p>延迟的分布：</p>
+<ul>
+<li>用百分数来表示发个文的延迟的统计特征</li>
+<li>例如 p95 延迟 1,s，代表 95% 的请求延迟要低于 1ms，但后 5% 的请求延迟会大于 1ms</li>
+</ul>
+<p>长尾延迟：尾部（p99&#x2F;p999&#x2F;p9999）的延迟，衡量系统最差的请求情况，会显著的要差于平均值</p>
+<p>尾部延迟放大</p>
+<p>木桶原理：尾部延迟放大：访问的服务变多，尾部的请求就会越发的慢</p>
+<p>如何变慢</p>
+<ul>
+<li>固定延迟阈值</li>
+<li>固定延迟百分位</li>
+</ul>
+<p>长尾问题的表现——慢节点</p>
+<p>慢节点：读取速度过慢，导致客户端阻塞</p>
+<p>慢节点的发生难以避免和预测</p>
+<ul>
+<li>共享资源、后台维护活动、请求多级排队、功率限制</li>
+<li>固定的损耗：机器损坏率</li>
+<li>混沌问题</li>
+</ul>
+<p>离线任务也会遇到长尾问题</p>
+<ul>
+<li>全部任务完成时间取决于最慢的任务什么时候完成</li>
+<li>集群规模变大，任务的数据量变大</li>
+<li>只要任何数据块的读取受到长尾影响，整个任务就会因此停滞</li>
+</ul>
+<p>集群扩大 10 倍，问题扩大 N（&gt;10）倍</p>
+<p>超大集群下的数据可靠性</p>
+<ul>
+<li>条件一：超大集群下，有一部分机器损坏来不及修理的。</li>
+<li>条件二：副本放置策略完全随机</li>
+<li>条件三：DN 容量足够大</li>
+</ul>
+<p>推论：必然有部分数据全部副本在损坏的机器上，发生数据丢失</p>
+<p>估算：三副本，10000 台机器，每台一百万副本。</p>
+<ul>
+<li>有多少种放置组合数</li>
+<li>损坏 100 台机器，会有多少副本丢失</li>
+</ul>
+<p>叠加长尾问题，容易导致整个任务无法执行下去</p>
+<p>Copyset</p>
+<p>将 DataNode 分为若干个 Copyset 选块在 Copyset 内部选择</p>
+<p>原理：减少了副本放置的组合数，从而降低副本丢失的概率</p>
+<p>超大集群的负载均衡和数据迁移</p>
+<p><img src="/blog/../images/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/image-20220805143659568.png" alt="image-20220805143659568"></p>
+<p>数据写入&#x2F;读取不均</p>
+<p>数据的不均匀</p>
+<ul>
+<li>节点容量不均匀</li>
+<li>数据新旧不均匀</li>
+<li>访问类型不均匀</li>
+</ul>
+<p>资源负载不均匀</p>
+<p>负载均衡和数据迁移的典型场景</p>
+<p><img src="/blog/../images/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/image-20220805143930787.png" alt="image-20220805143930787"></p>
+<p>数据迁移工具——跨 NN 迁移</p>
+<p>DistCopy</p>
+<ul>
+<li>基于 MapReduce，通过一个个任务，将数据从一个 NameNode 拷贝到另一个 NameNode</li>
+<li>需要拷贝数据，流量较大，速度较慢</li>
+</ul>
+<p>FastCopy</p>
+<ul>
+<li>开源社区的无需拷贝数据的源数据迁移方案</li>
+<li>前提条件：新旧集群的 DN 列表吻合</li>
+<li>对于元数据，直接复制目录树的结构和块信息</li>
+<li>对于数据块，直接要求 DataNode 从源 BlockPool hardlink 到目标 BlookPool，没有数据拷贝</li>
+<li>hardlink：直接让两个路径指向同一个块数据</li>
+</ul>
+<p>数据迁移工具——Balancer</p>
+<p>工具向 DataNode 发起迁移指令，平衡各个 DataNode 的容量</p>
+<p>场景：</p>
+<ul>
+<li>单机房使用、多机房使用</li>
+<li>限流措施</li>
+</ul>
+<p>评价标准</p>
+<ul>
+<li>稳定性成本</li>
+<li>可运维性</li>
+<li>执行效率</li>
+</ul>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://the_ring.gitee.io/blog/2022/08/03/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" data-id="cl6d2kzuc000024utak871yaa" data-title="HDFS 原理与应用" class="article-share-link">Share</a>
+      <a data-url="http://the_ring.gitee.io/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" data-id="cl6g3rxvz0001g4ut7era0ior" data-title="HDFS 高可用和高扩展机制分析" class="article-share-link">Share</a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/hdfs/" rel="tag">hdfs</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/HDFS/" rel="tag">HDFS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-HDFS 原理与应用" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" class="article-date">
+  <time class="dt-published" datetime="2022-08-05T04:05:10.000Z" itemprop="datePublished">2022-08-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/">HDFS 原理与应用</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="1-HDFS-基本介绍"><a href="#1-HDFS-基本介绍" class="headerlink" title="1. HDFS 基本介绍"></a>1. HDFS 基本介绍</h2><p>Windows 文件系统：NTFS</p>
+<p>Linux 文件系统：BTRFS、ZFS、XFS、EXT4</p>
+<p>分布式文件系统：大容量（更多的机器，更多的存储介质）、高可靠（多个副本提高容错能力）、低成本（不需要高端硬件来扩容）</p>
+<p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121036274.png" alt="image-20220805121036274"></p>
+<h4 id="HDFS-功能特性："><a href="#HDFS-功能特性：" class="headerlink" title="HDFS 功能特性："></a>HDFS 功能特性：</h4><ol>
+<li>分布式：受 GFS 启发，用 Java 实现的开源系统，没有实现完整的 POSIX 文件系统的语义</li>
+<li>容错：自动处理，规避多种错误场景，例如常见的网络错误、机器宕机等</li>
+<li>高可用：一主多备模式实现袁术高可用，数据多副本实现用户数据的高可用</li>
+<li>高吞吐：Client 直接从 DataNode 读取用户数据，服务端支持海量 Client 读写</li>
+<li>可扩展：支持联邦集群模式，DataNode 数量高达 10W 级别</li>
+<li>廉价：只需要通用硬件，不需要定制高端的昂贵硬件设备</li>
+</ol>
+<h2 id="2-架构原理"><a href="#2-架构原理" class="headerlink" title="2. 架构原理"></a>2. 架构原理</h2><h4 id="Client-写流程："><a href="#Client-写流程：" class="headerlink" title="Client 写流程："></a>Client 写流程：</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121752901.png" alt="image-20220805121752901"></p>
+<h4 id="Client-读流程："><a href="#Client-读流程：" class="headerlink" title="Client 读流程："></a>Client 读流程：</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121944362.png" alt="image-20220805121944362"></p>
+<h4 id="元数据节点-NameNode："><a href="#元数据节点-NameNode：" class="headerlink" title="元数据节点 NameNode："></a>元数据节点 NameNode：</h4><ul>
+<li><strong>维护目录树</strong>：维护目录树的增删改查，保证所有数据修改都能持久化，以便机器掉电不会造成数据丢失或不一致。</li>
+<li><strong>维护文件和数据块的关系</strong>：文件被切分成多个快，文件以数据快为单位进行多副本存放。</li>
+<li><strong>维护文件快存放节点信息</strong>：通过接收 DataNode 的心跳汇报信息，维护集群节点的拓扑结构和每个文件块所有副本所在的 DataNode 类表。</li>
+<li><strong>分配新文件存放节点</strong>：Client 创建新的文件时，需要 NameNode 来确定目标 DataNode。</li>
+</ul>
+<h4 id="数据节点-DataNode："><a href="#数据节点-DataNode：" class="headerlink" title="数据节点 DataNode："></a>数据节点 DataNode：</h4><ul>
+<li><strong>数据块存取</strong>：DataNode 需要高效实现对数据块在硬盘上的存取。</li>
+<li><strong>心跳汇报</strong>：把存放在本机的数据块发送给 NameNode，以便 NameNode 能维护数据块的位置信息，同时让 NameNode 确定该节点处于正常存活状态。</li>
+<li><strong>副本复制</strong>：数据写入时 Pipeline IO 操作；机器故障时补全副本。</li>
+</ul>
+<h2 id="3-关键设计"><a href="#3-关键设计" class="headerlink" title="3. 关键设计"></a>3. 关键设计</h2><h4 id="分布式存储系统基本概念："><a href="#分布式存储系统基本概念：" class="headerlink" title="分布式存储系统基本概念："></a>分布式存储系统基本概念：</h4><ol>
+<li><strong>容错能力</strong>：能够让绝大部分异常场景，例如服务器当即、网络异常、硬盘故障、网络超时等。</li>
+<li><strong>一致性模型</strong>：为了实现容错，数据必须多副本存放，一致性要解决的问题是如何保障多个副本的内容都是一致的。</li>
+<li><strong>可扩展性</strong>：分布式存储系统需要具备横向扩张 scale-out 的能力。</li>
+<li><strong>节点体系</strong>：常见的有主从模式、对等模式，不管哪种模式，高可用是必须的功能。</li>
+<li><strong>数据放置</strong>：系统是由多个节点组成，数据是多个副本存放时，需要考虑存放的策略。</li>
+<li><strong>单机存储引擎</strong>：在绝大多数存储系统中，数据都是需要落盘持久化，单机引擎需要解决的是根据系统特点，如何高效地存取硬盘数据。</li>
+</ol>
+<h4 id="NameNode-目录是维护"><a href="#NameNode-目录是维护" class="headerlink" title="NameNode 目录是维护"></a>NameNode 目录是维护</h4><ul>
+<li>fsimage<ul>
+<li>文件系统目录树</li>
+<li>完整的存放在内存</li>
+<li>定时存放到硬盘上</li>
+<li>修改时指挥修改内存中的目录树</li>
+</ul>
+</li>
+<li>EditLog<ul>
+<li>目录树的修改日志</li>
+<li>client 更新目录树需要持久化 EditLog 后才能表示更新成功</li>
+<li>EditLog 可存放在本地文件系统，也可存放在专用系统上</li>
+<li>NameNode HA 方案一贯关键点就是如何实现 EditLog 共享</li>
+</ul>
+</li>
+</ul>
+<h4 id="NameNode-数据放置"><a href="#NameNode-数据放置" class="headerlink" title="NameNode 数据放置"></a>NameNode 数据放置</h4><ul>
+<li>数据快信息维护<ul>
+<li>目录树保存了每个文件的块 id</li>
+<li>NameNode 维护了每个数据块所在的节点信息</li>
+<li>NameNode 根据 DataNode 汇报的信息动态维护位置信息</li>
+<li>NameNode 不会持久化数据块位置信息</li>
+</ul>
+</li>
+<li>数据块放置策略<ul>
+<li>新数据存放到哪个写节点</li>
+<li>数据均衡需要怎么合理搬迁数据</li>
+<li>3 个副本怎么合理放置</li>
+</ul>
+</li>
+</ul>
+<h4 id="DataNode"><a href="#DataNode" class="headerlink" title="DataNode"></a>DataNode</h4><ul>
+<li>数据块的硬盘存放<ul>
+<li>文件在 NameNode 已分割成 block</li>
+<li>DateNode 以 block 为单位对数据进行存取</li>
+</ul>
+</li>
+<li>启动扫盘<ul>
+<li>DataNode 需要知道本机存放了哪些数据块</li>
+<li>启动时把本机硬盘上的数据块列表加载在内存中</li>
+</ul>
+</li>
+</ul>
+<h4 id="HDFS-写异常处理"><a href="#HDFS-写异常处理" class="headerlink" title="HDFS 写异常处理"></a>HDFS 写异常处理</h4><p><strong>情景</strong>：文件写了一半，client 自己挂掉了。可能产生的问题：</p>
+<ul>
+<li>副本不一致</li>
+<li>Lease 无法释放</li>
+</ul>
+<p><strong>租约</strong>：Client 要修改一个文件，需要通过 NameNode 上锁，这个所就是租约（Lease）</p>
+<p><strong>解决办法</strong>：Lease Recovery</p>
+<p><strong>情景</strong>：文件写入过程中，DataNode 侧出现异常挂掉了。</p>
+<p><strong>异常出现的时机</strong>：</p>
+<ul>
+<li>创建连接时</li>
+<li>数据传输时</li>
+<li>complete 阶段</li>
+</ul>
+<p><strong>解决办法</strong>：Pipeline Recovery</p>
+<h4 id="HDFS-读异常处理"><a href="#HDFS-读异常处理" class="headerlink" title="HDFS 读异常处理"></a>HDFS 读异常处理</h4><p><strong>情景</strong>：读取文件的过程，DataNode 侧出现异常挂掉了</p>
+<p><strong>解决办法</strong>：节点 Failover</p>
+<p><strong>增强情景</strong>：节点半死不过，读取很慢</p>
+<h4 id="旁路系统"><a href="#旁路系统" class="headerlink" title="旁路系统"></a>旁路系统</h4><p><strong>Balancer</strong>：均衡 DataNode 的容量</p>
+<p><strong>Mover</strong>：确保副本放置符合策略要求</p>
+<h4 id="控制面建设"><a href="#控制面建设" class="headerlink" title="控制面建设"></a>控制面建设</h4><p><strong>可观测性设施</strong>：</p>
+<ul>
+<li>指标埋点</li>
+<li>数据采集</li>
+<li>访问日志</li>
+<li>数据分析</li>
+</ul>
+<p><strong>运维体系建设</strong></p>
+<ul>
+<li>运维操作需要平台化</li>
+<li>NameNode 操作复杂</li>
+<li>DataNode 机器规模庞大</li>
+<li>组件控制面 API</li>
+</ul>
+<h2 id="4-应用场景"><a href="#4-应用场景" class="headerlink" title="4. 应用场景"></a>4. 应用场景</h2><h4 id="ETL"><a href="#ETL" class="headerlink" title="ETL"></a>ETL</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130350452.png" alt="image-20220805130350452"></p>
+<h4 id="OLAP-查询引擎"><a href="#OLAP-查询引擎" class="headerlink" title="OLAP 查询引擎"></a>OLAP 查询引擎</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130455511.png" alt="image-20220805130455511"></p>
+<h4 id="HBase"><a href="#HBase" class="headerlink" title="HBase"></a>HBase</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130530917.png" alt="image-20220805130530917"></p>
+<h4 id="机器学习"><a href="#机器学习" class="headerlink" title="机器学习"></a>机器学习</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130609707.png" alt="image-20220805130609707"></p>
+<h4 id="通用存储应用"><a href="#通用存储应用" class="headerlink" title="通用存储应用"></a>通用存储应用</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130649802.png" alt="image-20220805130649802"></p>
+<blockquote>
+<p>MIT 8.624</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://the_ring.gitee.io/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" data-id="cl6g3rxvu0000g4ut7o6xg7u0" data-title="HDFS 原理与应用" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/HDFS/" rel="tag">HDFS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li></ul>
 
     </footer>
   </div>
@@ -329,7 +774,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://the_ring.gitee.io/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/" data-id="cl6d2kzur000d24uthtn7aw8r" data-title="Presto 架构原理与优化" class="article-share-link">Share</a>
+      <a data-url="http://the_ring.gitee.io/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/" data-id="cl6g3rxw30004g4ut1qoc5qk6" data-title="Presto 架构原理与优化" class="article-share-link">Share</a>
       
       
       
@@ -529,7 +974,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://the_ring.gitee.io/blog/2022/07/31/%E5%A4%A7%E6%95%B0%E6%8D%AE-Shuffle-%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/" data-id="cl6d2kzus000e24ut25tbfo7d" data-title="大数据 Shuffle 原理与实践" class="article-share-link">Share</a>
+      <a data-url="http://the_ring.gitee.io/blog/2022/07/31/%E5%A4%A7%E6%95%B0%E6%8D%AE-Shuffle-%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/" data-id="cl6g3rxwf000mg4ut4rwx5ep3" data-title="大数据 Shuffle 原理与实践" class="article-share-link">Share</a>
       
       
       
@@ -608,7 +1053,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://the_ring.gitee.io/blog/2022/07/30/Hexo%20+%20GiteeGithub%20%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/" data-id="cl6d2kzuh000124utaa6ggncl" data-title="Hexo + Gitee/Github 搭建个人博客" class="article-share-link">Share</a>
+      <a data-url="http://the_ring.gitee.io/blog/2022/07/30/Hexo%20+%20GiteeGithub%20%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/" data-id="cl6g3rxw20003g4utf98q85ke" data-title="Hexo + Gitee/Github 搭建个人博客" class="article-share-link">Share</a>
       
       
       
@@ -661,7 +1106,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="http://the_ring.gitee.io/blog/2022/07/30/hello-world/" data-id="cl6d2kzuq000c24utemoo6z0b" data-title="Hello World" class="article-share-link">Share</a>
+      <a data-url="http://the_ring.gitee.io/blog/2022/07/30/hello-world/" data-id="cl6g3rxwe000lg4ut5nkd2rrx" data-title="Hello World" class="article-share-link">Share</a>
       
       
       
@@ -686,7 +1131,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tags</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/gitee/" rel="tag">gitee</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/github/" rel="tag">github</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/hdfs/" rel="tag">hdfs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/hexo/" rel="tag">hexo</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/presto/" rel="tag">presto</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/shuffle/" rel="tag">shuffle</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/HDFS/" rel="tag">HDFS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/gitee/" rel="tag">gitee</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/github/" rel="tag">github</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/hexo/" rel="tag">hexo</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/presto/" rel="tag">presto</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/shuffle/" rel="tag">shuffle</a></li></ul>
     </div>
   </div>
 
@@ -696,7 +1141,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/blog/tags/big-data/" style="font-size: 20px;">big data</a> <a href="/blog/tags/gitee/" style="font-size: 10px;">gitee</a> <a href="/blog/tags/github/" style="font-size: 10px;">github</a> <a href="/blog/tags/hdfs/" style="font-size: 10px;">hdfs</a> <a href="/blog/tags/hexo/" style="font-size: 10px;">hexo</a> <a href="/blog/tags/presto/" style="font-size: 10px;">presto</a> <a href="/blog/tags/shuffle/" style="font-size: 10px;">shuffle</a>
+      <a href="/blog/tags/HDFS/" style="font-size: 15px;">HDFS</a> <a href="/blog/tags/big-data/" style="font-size: 20px;">big data</a> <a href="/blog/tags/gitee/" style="font-size: 10px;">gitee</a> <a href="/blog/tags/github/" style="font-size: 10px;">github</a> <a href="/blog/tags/hexo/" style="font-size: 10px;">hexo</a> <a href="/blog/tags/presto/" style="font-size: 10px;">presto</a> <a href="/blog/tags/shuffle/" style="font-size: 10px;">shuffle</a>
     </div>
   </div>
 
@@ -718,7 +1163,11 @@
       <ul>
         
           <li>
-            <a href="/blog/2022/08/03/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/">HDFS 原理与应用</a>
+            <a href="/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/">HDFS 高可用和高扩展机制分析</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/">HDFS 原理与应用</a>
           </li>
         
           <li>
@@ -731,10 +1180,6 @@
         
           <li>
             <a href="/blog/2022/07/30/Hexo%20+%20GiteeGithub%20%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/">Hexo + Gitee/Github 搭建个人博客</a>
-          </li>
-        
-          <li>
-            <a href="/blog/2022/07/30/hello-world/">Hello World</a>
           </li>
         
       </ul>

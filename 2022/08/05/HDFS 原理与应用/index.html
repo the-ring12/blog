@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>HDFS 原理与应用 | Hexo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="1. HDFS 基本介绍Windows 文件系统：NTFS Linux 文件系统：BTRFS、ZFS、XFS、EXT4 分布式文件系统：大容量（更多的机器，更多的存储介质）、高可靠（多个副本提高容错能力）、低成本（不需要高端硬件来扩容）  HDFS 功能特性： 分布式：受 GFS 启发，用 Java 实现的开源系统，没有实现完整的 POSIX 文件系统的语义 容错：自动处理，规避多种错误场景，例如">
+<meta property="og:type" content="article">
+<meta property="og:title" content="HDFS 原理与应用">
+<meta property="og:url" content="http://the_ring.gitee.io/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/index.html">
+<meta property="og:site_name" content="Hexo">
+<meta property="og:description" content="1. HDFS 基本介绍Windows 文件系统：NTFS Linux 文件系统：BTRFS、ZFS、XFS、EXT4 分布式文件系统：大容量（更多的机器，更多的存储介质）、高可靠（多个副本提高容错能力）、低成本（不需要高端硬件来扩容）  HDFS 功能特性： 分布式：受 GFS 启发，用 Java 实现的开源系统，没有实现完整的 POSIX 文件系统的语义 容错：自动处理，规避多种错误场景，例如">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121036274.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121752901.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121944362.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130350452.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130455511.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130530917.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130609707.png">
+<meta property="og:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130649802.png">
+<meta property="article:published_time" content="2022-08-05T04:05:10.000Z">
+<meta property="article:modified_time" content="2022-08-05T05:09:23.077Z">
+<meta property="article:author" content="John Doe">
+<meta property="article:tag" content="big data">
+<meta property="article:tag" content="HDFS">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://the_ring.gitee.io/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121036274.png">
+  
+    <link rel="alternate" href="/blog/atom.xml" title="Hexo" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/blog/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/blog/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/blog/fancybox/jquery.fancybox.min.css">
+
+  
+<meta name="generator" content="Hexo 6.2.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/blog/" id="logo">Hexo</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"></a>
+        
+          <a class="main-nav-link" href="/blog/">Home</a>
+        
+          <a class="main-nav-link" href="/blog/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+          <a id="nav-rss-link" class="nav-icon" href="/blog/atom.xml" title="RSS Feed"></a>
+        
+        <a id="nav-search-btn" class="nav-icon" title="Search"></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="http://the_ring.gitee.io/blog"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-HDFS 原理与应用" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" class="article-date">
+  <time class="dt-published" datetime="2022-08-05T04:05:10.000Z" itemprop="datePublished">2022-08-05</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      HDFS 原理与应用
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="1-HDFS-基本介绍"><a href="#1-HDFS-基本介绍" class="headerlink" title="1. HDFS 基本介绍"></a>1. HDFS 基本介绍</h2><p>Windows 文件系统：NTFS</p>
+<p>Linux 文件系统：BTRFS、ZFS、XFS、EXT4</p>
+<p>分布式文件系统：大容量（更多的机器，更多的存储介质）、高可靠（多个副本提高容错能力）、低成本（不需要高端硬件来扩容）</p>
+<p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121036274.png" alt="image-20220805121036274"></p>
+<h4 id="HDFS-功能特性："><a href="#HDFS-功能特性：" class="headerlink" title="HDFS 功能特性："></a>HDFS 功能特性：</h4><ol>
+<li>分布式：受 GFS 启发，用 Java 实现的开源系统，没有实现完整的 POSIX 文件系统的语义</li>
+<li>容错：自动处理，规避多种错误场景，例如常见的网络错误、机器宕机等</li>
+<li>高可用：一主多备模式实现袁术高可用，数据多副本实现用户数据的高可用</li>
+<li>高吞吐：Client 直接从 DataNode 读取用户数据，服务端支持海量 Client 读写</li>
+<li>可扩展：支持联邦集群模式，DataNode 数量高达 10W 级别</li>
+<li>廉价：只需要通用硬件，不需要定制高端的昂贵硬件设备</li>
+</ol>
+<h2 id="2-架构原理"><a href="#2-架构原理" class="headerlink" title="2. 架构原理"></a>2. 架构原理</h2><h4 id="Client-写流程："><a href="#Client-写流程：" class="headerlink" title="Client 写流程："></a>Client 写流程：</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121752901.png" alt="image-20220805121752901"></p>
+<h4 id="Client-读流程："><a href="#Client-读流程：" class="headerlink" title="Client 读流程："></a>Client 读流程：</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805121944362.png" alt="image-20220805121944362"></p>
+<h4 id="元数据节点-NameNode："><a href="#元数据节点-NameNode：" class="headerlink" title="元数据节点 NameNode："></a>元数据节点 NameNode：</h4><ul>
+<li><strong>维护目录树</strong>：维护目录树的增删改查，保证所有数据修改都能持久化，以便机器掉电不会造成数据丢失或不一致。</li>
+<li><strong>维护文件和数据块的关系</strong>：文件被切分成多个快，文件以数据快为单位进行多副本存放。</li>
+<li><strong>维护文件快存放节点信息</strong>：通过接收 DataNode 的心跳汇报信息，维护集群节点的拓扑结构和每个文件块所有副本所在的 DataNode 类表。</li>
+<li><strong>分配新文件存放节点</strong>：Client 创建新的文件时，需要 NameNode 来确定目标 DataNode。</li>
+</ul>
+<h4 id="数据节点-DataNode："><a href="#数据节点-DataNode：" class="headerlink" title="数据节点 DataNode："></a>数据节点 DataNode：</h4><ul>
+<li><strong>数据块存取</strong>：DataNode 需要高效实现对数据块在硬盘上的存取。</li>
+<li><strong>心跳汇报</strong>：把存放在本机的数据块发送给 NameNode，以便 NameNode 能维护数据块的位置信息，同时让 NameNode 确定该节点处于正常存活状态。</li>
+<li><strong>副本复制</strong>：数据写入时 Pipeline IO 操作；机器故障时补全副本。</li>
+</ul>
+<h2 id="3-关键设计"><a href="#3-关键设计" class="headerlink" title="3. 关键设计"></a>3. 关键设计</h2><h4 id="分布式存储系统基本概念："><a href="#分布式存储系统基本概念：" class="headerlink" title="分布式存储系统基本概念："></a>分布式存储系统基本概念：</h4><ol>
+<li><strong>容错能力</strong>：能够让绝大部分异常场景，例如服务器当即、网络异常、硬盘故障、网络超时等。</li>
+<li><strong>一致性模型</strong>：为了实现容错，数据必须多副本存放，一致性要解决的问题是如何保障多个副本的内容都是一致的。</li>
+<li><strong>可扩展性</strong>：分布式存储系统需要具备横向扩张 scale-out 的能力。</li>
+<li><strong>节点体系</strong>：常见的有主从模式、对等模式，不管哪种模式，高可用是必须的功能。</li>
+<li><strong>数据放置</strong>：系统是由多个节点组成，数据是多个副本存放时，需要考虑存放的策略。</li>
+<li><strong>单机存储引擎</strong>：在绝大多数存储系统中，数据都是需要落盘持久化，单机引擎需要解决的是根据系统特点，如何高效地存取硬盘数据。</li>
+</ol>
+<h4 id="NameNode-目录是维护"><a href="#NameNode-目录是维护" class="headerlink" title="NameNode 目录是维护"></a>NameNode 目录是维护</h4><ul>
+<li>fsimage<ul>
+<li>文件系统目录树</li>
+<li>完整的存放在内存</li>
+<li>定时存放到硬盘上</li>
+<li>修改时指挥修改内存中的目录树</li>
+</ul>
+</li>
+<li>EditLog<ul>
+<li>目录树的修改日志</li>
+<li>client 更新目录树需要持久化 EditLog 后才能表示更新成功</li>
+<li>EditLog 可存放在本地文件系统，也可存放在专用系统上</li>
+<li>NameNode HA 方案一贯关键点就是如何实现 EditLog 共享</li>
+</ul>
+</li>
+</ul>
+<h4 id="NameNode-数据放置"><a href="#NameNode-数据放置" class="headerlink" title="NameNode 数据放置"></a>NameNode 数据放置</h4><ul>
+<li>数据快信息维护<ul>
+<li>目录树保存了每个文件的块 id</li>
+<li>NameNode 维护了每个数据块所在的节点信息</li>
+<li>NameNode 根据 DataNode 汇报的信息动态维护位置信息</li>
+<li>NameNode 不会持久化数据块位置信息</li>
+</ul>
+</li>
+<li>数据块放置策略<ul>
+<li>新数据存放到哪个写节点</li>
+<li>数据均衡需要怎么合理搬迁数据</li>
+<li>3 个副本怎么合理放置</li>
+</ul>
+</li>
+</ul>
+<h4 id="DataNode"><a href="#DataNode" class="headerlink" title="DataNode"></a>DataNode</h4><ul>
+<li>数据块的硬盘存放<ul>
+<li>文件在 NameNode 已分割成 block</li>
+<li>DateNode 以 block 为单位对数据进行存取</li>
+</ul>
+</li>
+<li>启动扫盘<ul>
+<li>DataNode 需要知道本机存放了哪些数据块</li>
+<li>启动时把本机硬盘上的数据块列表加载在内存中</li>
+</ul>
+</li>
+</ul>
+<h4 id="HDFS-写异常处理"><a href="#HDFS-写异常处理" class="headerlink" title="HDFS 写异常处理"></a>HDFS 写异常处理</h4><p><strong>情景</strong>：文件写了一半，client 自己挂掉了。可能产生的问题：</p>
+<ul>
+<li>副本不一致</li>
+<li>Lease 无法释放</li>
+</ul>
+<p><strong>租约</strong>：Client 要修改一个文件，需要通过 NameNode 上锁，这个所就是租约（Lease）</p>
+<p><strong>解决办法</strong>：Lease Recovery</p>
+<p><strong>情景</strong>：文件写入过程中，DataNode 侧出现异常挂掉了。</p>
+<p><strong>异常出现的时机</strong>：</p>
+<ul>
+<li>创建连接时</li>
+<li>数据传输时</li>
+<li>complete 阶段</li>
+</ul>
+<p><strong>解决办法</strong>：Pipeline Recovery</p>
+<h4 id="HDFS-读异常处理"><a href="#HDFS-读异常处理" class="headerlink" title="HDFS 读异常处理"></a>HDFS 读异常处理</h4><p><strong>情景</strong>：读取文件的过程，DataNode 侧出现异常挂掉了</p>
+<p><strong>解决办法</strong>：节点 Failover</p>
+<p><strong>增强情景</strong>：节点半死不过，读取很慢</p>
+<h4 id="旁路系统"><a href="#旁路系统" class="headerlink" title="旁路系统"></a>旁路系统</h4><p><strong>Balancer</strong>：均衡 DataNode 的容量</p>
+<p><strong>Mover</strong>：确保副本放置符合策略要求</p>
+<h4 id="控制面建设"><a href="#控制面建设" class="headerlink" title="控制面建设"></a>控制面建设</h4><p><strong>可观测性设施</strong>：</p>
+<ul>
+<li>指标埋点</li>
+<li>数据采集</li>
+<li>访问日志</li>
+<li>数据分析</li>
+</ul>
+<p><strong>运维体系建设</strong></p>
+<ul>
+<li>运维操作需要平台化</li>
+<li>NameNode 操作复杂</li>
+<li>DataNode 机器规模庞大</li>
+<li>组件控制面 API</li>
+</ul>
+<h2 id="4-应用场景"><a href="#4-应用场景" class="headerlink" title="4. 应用场景"></a>4. 应用场景</h2><h4 id="ETL"><a href="#ETL" class="headerlink" title="ETL"></a>ETL</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130350452.png" alt="image-20220805130350452"></p>
+<h4 id="OLAP-查询引擎"><a href="#OLAP-查询引擎" class="headerlink" title="OLAP 查询引擎"></a>OLAP 查询引擎</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130455511.png" alt="image-20220805130455511"></p>
+<h4 id="HBase"><a href="#HBase" class="headerlink" title="HBase"></a>HBase</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130530917.png" alt="image-20220805130530917"></p>
+<h4 id="机器学习"><a href="#机器学习" class="headerlink" title="机器学习"></a>机器学习</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130609707.png" alt="image-20220805130609707"></p>
+<h4 id="通用存储应用"><a href="#通用存储应用" class="headerlink" title="通用存储应用"></a>通用存储应用</h4><p><img src="/blog/images/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/image-20220805130649802.png" alt="image-20220805130649802"></p>
+<blockquote>
+<p>MIT 8.624</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="http://the_ring.gitee.io/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/" data-id="cl6g3rxvu0000g4ut7o6xg7u0" data-title="HDFS 原理与应用" class="article-share-link">Share</a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/HDFS/" rel="tag">HDFS</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          HDFS 高可用和高扩展机制分析
+        
+      </div>
+    </a>
+  
+  
+    <a href="/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Presto 架构原理与优化</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/HDFS/" rel="tag">HDFS</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/big-data/" rel="tag">big data</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/gitee/" rel="tag">gitee</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/github/" rel="tag">github</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/hexo/" rel="tag">hexo</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/presto/" rel="tag">presto</a></li><li class="tag-list-item"><a class="tag-list-link" href="/blog/tags/shuffle/" rel="tag">shuffle</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/blog/tags/HDFS/" style="font-size: 15px;">HDFS</a> <a href="/blog/tags/big-data/" style="font-size: 20px;">big data</a> <a href="/blog/tags/gitee/" style="font-size: 10px;">gitee</a> <a href="/blog/tags/github/" style="font-size: 10px;">github</a> <a href="/blog/tags/hexo/" style="font-size: 10px;">hexo</a> <a href="/blog/tags/presto/" style="font-size: 10px;">presto</a> <a href="/blog/tags/shuffle/" style="font-size: 10px;">shuffle</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/blog/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/blog/archives/2022/07/">July 2022</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/blog/2022/08/05/HDFS%20%E9%AB%98%E5%8F%AF%E7%94%A8%E5%92%8C%E9%AB%98%E6%89%A9%E5%B1%95%E6%9C%BA%E5%88%B6%E5%88%86%E6%9E%90/">HDFS 高可用和高扩展机制分析</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/08/05/HDFS%20%E5%8E%9F%E7%90%86%E4%B8%8E%E5%BA%94%E7%94%A8/">HDFS 原理与应用</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/08/03/Presto%20%E6%9E%B6%E6%9E%84%E5%8E%9F%E7%90%86%E4%B8%8E%E4%BC%98%E5%8C%96%E4%BB%8B%E7%BB%8D/">Presto 架构原理与优化</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/07/31/%E5%A4%A7%E6%95%B0%E6%8D%AE-Shuffle-%E5%8E%9F%E7%90%86%E4%B8%8E%E5%AE%9E%E8%B7%B5/">大数据 Shuffle 原理与实践</a>
+          </li>
+        
+          <li>
+            <a href="/blog/2022/07/30/Hexo%20+%20GiteeGithub%20%E6%90%AD%E5%BB%BA%E4%B8%AA%E4%BA%BA%E5%8D%9A%E5%AE%A2/">Hexo + Gitee/Github 搭建个人博客</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2022 John Doe<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/blog/" class="mobile-nav-link">Home</a>
+  
+    <a href="/blog/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/blog/js/jquery-3.4.1.min.js"></script>
+
+
+
+  
+<script src="/blog/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/blog/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
